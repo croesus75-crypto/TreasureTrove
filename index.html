@@ -3,35 +3,331 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARTHOUSE Vault - 미술품 컬렉션 관리자</title>
+    <title>미술품 컬렉션 관리 시스템</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- React & ReactDOM -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- Babel Standalone -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Custom Web Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; }
-        .font-serif-kr { font-family: 'Noto Serif KR', serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Pretendard', sans-serif; }
+        .glass-header {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+        }
+        .admin-only { display: none !important; }
+        .is-admin .admin-only { display: flex !important; }
+        .is-admin tr.admin-only, .is-admin td.admin-only, .is-admin th.admin-only { display: table-cell !important; }
+        .is-admin div.admin-only { display: block !important; }
+        .is-admin span.admin-only { display: inline !important; }
+        .is-admin div.admin-only-flex { display: flex !important; }
     </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+    <!-- Header -->
+    <header class="glass-header sticky top-0 z-40 border-b border-slate-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 text-white p-2 rounded-lg shadow">
+                    <i class="fa-solid fa-palette text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-900 leading-tight">미술품 컬렉션Vault</h1>
+                    <p class="text-xs text-slate-500">Private Art Portfolio Management</p>
+                </div>
+            </div>
 
-        // IndexedDB 헬퍼 (대용량 브라우저 데이터베이스: LocalStorage 5MB 한계 전면 극복)
-        const DB_NAME = 'ArthouseVaultDB';
-        const STORE_NAME = 'artworks';
+            <!-- Header Action Buttons -->
+            <div class="flex items-center gap-2">
+                <!-- Admin Status / Toggle -->
+                <button id="adminAuthBtn" onclick="toggleAdminModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-white hover:bg-slate-700 transition flex items-center gap-1.5 shadow">
+                    <i class="fa-solid fa-lock"></i> <span id="adminBtnText">관리자 로그인</span>
+                </button>
+
+                <div class="admin-only hidden items-center gap-2">
+                    <button onclick="openChangePasswordModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 text-white hover:bg-amber-600 transition flex items-center gap-1 shadow" title="비밀번호 변경">
+                        <i class="fa-solid fa-key"></i> 암호 변경
+                    </button>
+                    <button onclick="openAddModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition flex items-center gap-1 shadow">
+                        <i class="fa-solid fa-plus"></i> 작품 등록
+                    </button>
+                    <button onclick="exportJSON()" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition shadow" title="백업 다운로드">
+                        <i class="fa-solid fa-download"></i> 백업
+                    </button>
+                    <label class="px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-600 text-white hover:bg-cyan-700 transition cursor-pointer shadow" title="백업 불러오기">
+                        <i class="fa-solid fa-upload"></i> 복원
+                        <input type="file" id="importFileInput" onchange="importJSON(event)" accept=".json" class="hidden">
+                    </label>
+                    <button onclick="exportCSV()" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-600 text-white hover:bg-slate-700 transition shadow" title="엑셀 내보내기">
+                        <i class="fa-solid fa-file-excel"></i> CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-6">
+
+        <!-- Top Summary Cards (Admin Only) -->
+        <div class="admin-only grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="text-xs font-medium text-slate-500 mb-1">총 소장 작품</div>
+                <div class="text-2xl font-bold text-slate-900" id="statTotalCount">0점</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="text-xs font-medium text-slate-500 mb-1">총 취득/구입 금액</div>
+                <div class="text-2xl font-bold text-slate-900" id="statTotalPurchase">₩0</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="text-xs font-medium text-slate-500 mb-1">현재 추정 평가액</div>
+                <div class="text-2xl font-bold text-indigo-600" id="statTotalCurrent">₩0</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="text-xs font-medium text-slate-500 mb-1">총 평가 손익 / 수익률</div>
+                <div class="text-2xl font-bold text-emerald-600" id="statTotalProfit">₩0 (0%)</div>
+            </div>
+        </div>
+
+        <!-- Control Bar (Filter / Search / View Mode) -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                <input type="text" id="searchInput" oninput="renderApp()" placeholder="작가명, 작품명, 장르 검색..." class="px-3 py-2 border border-slate-300 rounded-lg text-sm w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                
+                <select id="genreFilter" onchange="renderApp()" class="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">전체 장르</option>
+                    <option value="서양화">서양화</option>
+                    <option value="동양화">동양화</option>
+                    <option value="조각">조각</option>
+                    <option value="판화">판화</option>
+                    <option value="사진">사진</option>
+                    <option value="미디어">미디어</option>
+                    <option value="기타">기타</option>
+                </select>
+
+                <!-- Admin Only: Purchase Gallery Filter -->
+                <select id="galleryFilter" onchange="renderApp()" class="admin-only px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">전체 구입 갤러리</option>
+                </select>
+            </div>
+
+            <div class="flex items-center gap-2 self-end md:self-auto">
+                <button onclick="setViewMode('grid')" id="btnViewGrid" class="p-2 border rounded-lg text-slate-600 hover:bg-slate-100 bg-slate-100"><i class="fa-solid fa-border-all"></i></button>
+                <button onclick="setViewMode('list')" id="btnViewList" class="p-2 border rounded-lg text-slate-600 hover:bg-slate-100"><i class="fa-solid fa-list"></i></button>
+            </div>
+        </div>
+
+        <!-- Artwork Collection Container -->
+        <div id="artworkContainer"></div>
+
+    </main>
+
+    <!-- Modal: Admin Auth (Login / Logout) -->
+    <div id="authModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="text-center">
+                <div class="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <i class="fa-solid fa-shield-halved text-xl"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900">관리자 인증</h3>
+                <p class="text-xs text-slate-500 mt-1">가격 및 관리자 메뉴에 접근하려면 비밀번호를 입력하세요.</p>
+            </div>
+            <div>
+                <input type="password" id="adminPasswordInput" placeholder="비밀번호 입력 (기본: 1234)" class="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center" onkeyup="if(event.key==='Enter') verifyAdmin()">
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeAdminModal()" class="flex-1 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50">취소</button>
+                <button onclick="verifyAdmin()" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Change Password -->
+    <div id="changePwModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="text-center">
+                <h3 class="text-lg font-bold text-slate-900">비밀번호 변경</h3>
+                <p class="text-xs text-slate-500 mt-1">새로운 관리자 비밀번호를 설정하세요.</p>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs font-semibold text-slate-600 mb-1 block">현재 비밀번호</label>
+                    <input type="password" id="curPwInput" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-slate-600 mb-1 block">새 비밀번호</label>
+                    <input type="password" id="newPwInput" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+            <div class="flex gap-2 pt-2">
+                <button onclick="closeChangePasswordModal()" class="flex-1 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50">취소</button>
+                <button onclick="saveNewPassword()" class="flex-1 py-2.5 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600">변경 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add / Edit Artwork -->
+    <div id="artModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto my-auto">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-lg font-bold text-slate-900" id="artModalTitle">작품 정보 등록</h3>
+                <button onclick="closeArtModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <form id="artForm" onsubmit="handleArtSubmit(event)" class="space-y-4">
+                <input type="hidden" id="artId">
+
+                <!-- Images Upload -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">작품 앞면 이미지</label>
+                        <input type="file" id="frontImgInput" accept="image/*" class="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                        <div id="frontImgPreview" class="mt-2 h-32 bg-slate-100 rounded-lg border flex items-center justify-center overflow-hidden">
+                            <span class="text-xs text-slate-400">이미지 없음</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">작품 뒷면 / 서명 이미지</label>
+                        <input type="file" id="backImgInput" accept="image/*" class="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                        <div id="backImgPreview" class="mt-2 h-32 bg-slate-100 rounded-lg border flex items-center justify-center overflow-hidden">
+                            <span class="text-xs text-slate-400">이미지 없음</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Basic Artwork Metadata -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">작가명 *</label>
+                        <input type="text" id="artist" required class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">작품명 *</label>
+                        <input type="text" id="title" required class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">제작 년도</label>
+                        <input type="text" id="year" placeholder="예: 2023" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">크기 (호수 / cm)</label>
+                        <input type="text" id="size" placeholder="예: 10호 (53x45.5cm)" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">재료 / 기법</label>
+                        <input type="text" id="medium" placeholder="예: Oil on canvas" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">장르</label>
+                        <select id="genre" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                            <option value="서양화">서양화</option>
+                            <option value="동양화">동양화</option>
+                            <option value="조각">조각</option>
+                            <option value="판화">판화</option>
+                            <option value="사진">사진</option>
+                            <option value="미디어">미디어</option>
+                            <option value="기타">기타</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Purchase / Financial Details -->
+                <div class="border-t pt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">정가 / 추정가 (원)</label>
+                        <input type="number" id="listPrice" oninput="calcDiscount()" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">실제 구입가 (원)</label>
+                        <input type="number" id="purchasePrice" oninput="calcDiscount()" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">할인율 / 할인금액</label>
+                        <input type="text" id="discountDisplay" readonly placeholder="자동 계산" class="w-full px-3 py-2 border bg-slate-50 rounded-lg text-sm font-semibold text-indigo-600">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">현재 평가가 (원)</label>
+                        <input type="number" id="currentPrice" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">구입 갤러리 / 출처</label>
+                        <input type="text" id="gallery" placeholder="예: 가나아트, 케이옥션" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">구입 날짜</label>
+                        <input type="date" id="purchaseDate" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">비고 / 메모</label>
+                    <textarea id="notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" placeholder="보증서 유무, 보관 상태 등"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2 border-t">
+                    <button type="button" onclick="closeArtModal()" class="px-4 py-2 border rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50">취소</button>
+                    <button type="submit" class="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">저장하기</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Valuation History Log -->
+    <div id="historyModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900">시세 / 평가액 히스토리 추적</h3>
+                    <p class="text-xs text-slate-500" id="historyArtworkTitle"></p>
+                </div>
+                <button onclick="closeHistoryModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div class="flex gap-2">
+                <input type="date" id="histDate" class="px-3 py-2 border rounded-lg text-sm">
+                <input type="number" id="histPrice" placeholder="새 시세 평가액 (원)" class="flex-1 px-3 py-2 border rounded-lg text-sm">
+                <button onclick="addPriceHistory()" class="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg font-semibold hover:bg-indigo-700">추가</button>
+            </div>
+
+            <div class="border rounded-lg max-h-60 overflow-y-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="bg-slate-100 text-slate-600 border-b">
+                        <tr>
+                            <th class="p-2.5">날짜</th>
+                            <th class="p-2.5">평가 금액</th>
+                            <th class="p-2.5 text-right">삭제</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody" class="divide-y"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- IndexedDB & Main Script -->
+    <script>
+        // IndexedDB Configuration
+        const DB_NAME = 'ArtVaultDB';
         const DB_VERSION = 1;
+        const STORE_NAME = 'artworks';
+        let db = null;
 
-        const openDB = () => {
+        // Admin State
+        let isAdmin = false;
+        let adminPassword = localStorage.getItem('artVault_password') || '1234';
+        let artworks = [];
+        let viewMode = 'grid'; // 'grid' | 'list'
+        let currentHistoryArtId = null;
+
+        // Initialize Database
+        function initDB() {
             return new Promise((resolve, reject) => {
                 const request = indexedDB.open(DB_NAME, DB_VERSION);
                 request.onupgradeneeded = (e) => {
@@ -40,707 +336,601 @@
                         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
                     }
                 };
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = (e) => reject('IndexedDB 열기 실패: ' + e.target.error);
-            });
-        };
-
-        const getAllArtworksFromDB = async () => {
-            try {
-                const db = await openDB();
-                return new Promise((resolve, reject) => {
-                    const tx = db.transaction(STORE_NAME, 'readonly');
-                    const store = tx.objectStore(STORE_NAME);
-                    const request = store.getAll();
-                    request.onsuccess = () => resolve(request.result || []);
-                    request.onerror = () => reject(request.error);
-                });
-            } catch (err) {
-                console.error(err);
-                return [];
-            }
-        };
-
-        const saveArtworkToDB = async (item) => {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(STORE_NAME, 'readwrite');
-                const store = tx.objectStore(STORE_NAME);
-                const request = store.put(item);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        };
-
-        const deleteArtworkFromDB = async (id) => {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(STORE_NAME, 'readwrite');
-                const store = tx.objectStore(STORE_NAME);
-                const request = store.delete(id);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        };
-
-        const bulkSaveToDB = async (items) => {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(STORE_NAME, 'readwrite');
-                const store = tx.objectStore(STORE_NAME);
-                store.clear();
-                items.forEach(item => store.put(item));
-                tx.oncomplete = () => resolve();
-                tx.onerror = () => reject(tx.error);
-            });
-        };
-
-        // 이미지 고효율 압축 함수
-        const compressImage = (file, maxWidth = 1000, quality = 0.7) => {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.src = event.target.result;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width;
-                        let height = img.height;
-
-                        if (width > maxWidth) {
-                            height = Math.round((height * maxWidth) / width);
-                            width = maxWidth;
-                        }
-
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-                        resolve(canvas.toDataURL('image/jpeg', quality));
-                    };
-                    img.onerror = () => resolve(event.target.result);
+                request.onsuccess = (e) => {
+                    db = e.target.result;
+                    resolve();
                 };
+                request.onerror = (e) => reject(e.target.error);
             });
-        };
-
-        // 초기 기본 예시 데이터
-        const INITIAL_DATA = [
-            {
-                id: '1',
-                title: 'Untitled (Composition)',
-                artist: '김환기',
-                purchaseDate: '2024-03-15',
-                listPrice: 35000000,
-                purchasePrice: 32000000,
-                currentPrice: 40000000,
-                priceUpdateDate: '2026-01-10',
-                medium: 'Oil on canvas',
-                size: '60.6 x 50.0 cm (12호)',
-                gallery: '현대화랑',
-                status: 'Owned',
-                coaAttached: true,
-                frontImage: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=800&q=80',
-                backImage: '',
-                notes: '액자 포함 상태 양호, 보증서 보관 완료'
-            }
-        ];
-
-        function App() {
-            const [artworks, setArtworks] = useState([]);
-            const [isLoading, setIsLoading] = useState(true);
-            const [search, setSearch] = useState('');
-            const [sortBy, setSortBy] = useState('dateDesc');
-            const [filterStatus, setFilterStatus] = useState('Owned');
-            const [selectedArt, setSelectedArt] = useState(null);
-            const [viewImageTab, setViewImageTab] = useState('front');
-            const [isModalOpen, setIsModalOpen] = useState(false);
-            const [editingId, setEditingId] = useState(null);
-            const [isPriceUpdateModalOpen, setIsPriceUpdateModalOpen] = useState(false);
-            const [quickPrice, setQuickPrice] = useState('');
-            const [quickPriceDate, setQuickPriceDate] = useState('');
-            const fileInputRef = useRef(null);
-
-            const [formData, setFormData] = useState({
-                title: '', artist: '', purchaseDate: '', listPrice: '', purchasePrice: '',
-                currentPrice: '', priceUpdateDate: '', medium: '', size: '', gallery: '',
-                status: 'Owned', coaAttached: true, frontImage: '', backImage: '', notes: ''
-            });
-
-            // 초기 데이터 로딩 (IndexedDB에서 읽어오기, 기존 LocalStorage 호환 이전)
-            useEffect(() => {
-                const loadData = async () => {
-                    try {
-                        let items = await getAllArtworksFromDB();
-                        
-                        // 기존 localStorage 데이터가 있다면 무사히 DB로 마이그레이션
-                        const legacySaved = localStorage.getItem('arthouse_vault_items');
-                        if ((!items || items.length === 0) && legacySaved) {
-                            try {
-                                const parsed = JSON.parse(legacySaved);
-                                if (Array.isArray(parsed) && parsed.length > 0) {
-                                    items = parsed;
-                                    await bulkSaveToDB(parsed);
-                                    localStorage.removeItem('arthouse_vault_items'); // 마이그레이션 완료 후 청소
-                                }
-                            } catch (e) {
-                                console.error('기존 데이터 이동 중 오류:', e);
-                            }
-                        }
-
-                        if (!items || items.length === 0) {
-                            items = INITIAL_DATA;
-                            await bulkSaveToDB(INITIAL_DATA);
-                        }
-
-                        setArtworks(items);
-                    } catch (err) {
-                        console.error('데이터베이스 불러오기 실패:', err);
-                    } finally {
-                        setIsLoading(false);
-                    }
-                };
-
-                loadData();
-            }, []);
-
-            useEffect(() => {
-                if (window.lucide) window.lucide.createIcons();
-            });
-
-            const filteredArtworks = useMemo(() => {
-                return artworks
-                    .filter(item => {
-                        const matchesFilter = filterStatus === 'All' || item.status === filterStatus;
-                        const matchesSearch = (item.title || '').toLowerCase().includes(search.toLowerCase()) ||
-                                              (item.artist || '').toLowerCase().includes(search.toLowerCase()) ||
-                                              (item.gallery || '').toLowerCase().includes(search.toLowerCase());
-                        return matchesFilter && matchesSearch;
-                    })
-                    .sort((a, b) => {
-                        if (sortBy === 'dateDesc') return new Date(b.purchaseDate || 0) - new Date(a.purchaseDate || 0);
-                        if (sortBy === 'dateAsc') return new Date(a.purchaseDate || 0) - new Date(a.purchaseDate || 0);
-                        if (sortBy === 'priceDesc') return (b.currentPrice || b.purchasePrice || 0) - (a.currentPrice || a.purchasePrice || 0);
-                        if (sortBy === 'priceAsc') return (a.currentPrice || a.purchasePrice || 0) - (b.currentPrice || b.purchasePrice || 0);
-                        return (a.title || '').localeCompare(b.title || '');
-                    });
-            }, [artworks, search, sortBy, filterStatus]);
-
-            const stats = useMemo(() => {
-                const owned = artworks.filter(a => a.status === 'Owned');
-                const totalCost = owned.reduce((sum, a) => sum + Number(a.purchasePrice || 0), 0);
-                const totalCurrentValue = owned.reduce((sum, a) => sum + Number(a.currentPrice || a.purchasePrice || 0), 0);
-                const totalList = owned.reduce((sum, a) => sum + Number(a.listPrice || a.purchasePrice || 0), 0);
-                const discount = totalList > 0 ? ((totalList - totalCost) / totalList) * 100 : 0;
-                const totalProfit = totalCurrentValue - totalCost;
-                const roiRate = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0;
-
-                return {
-                    totalCost,
-                    totalCurrentValue,
-                    count: owned.length,
-                    discount: discount.toFixed(1),
-                    totalProfit,
-                    roiRate: roiRate.toFixed(1)
-                };
-            }, [artworks]);
-
-            const exportJSON = () => {
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(artworks, null, 2));
-                const downloadAnchor = document.createElement('a');
-                downloadAnchor.setAttribute("href", dataStr);
-                downloadAnchor.setAttribute("download", `미술품_컬렉션_백업_${new Date().toISOString().slice(0,10)}.json`);
-                document.body.appendChild(downloadAnchor);
-                downloadAnchor.click();
-                downloadAnchor.remove();
-            };
-
-            const importJSON = (e) => {
-                const fileReader = new FileReader();
-                if (e.target.files && e.target.files[0]) {
-                    fileReader.readAsText(e.target.files[0], "UTF-8");
-                    fileReader.onload = async (event) => {
-                        try {
-                            const parsed = JSON.parse(event.target.result);
-                            if (Array.isArray(parsed)) {
-                                await bulkSaveToDB(parsed);
-                                setArtworks(parsed);
-                                alert('성공적으로 백업 데이터를 복원했습니다!');
-                            } else {
-                                alert('올바른 백업 파일 형식이 아닙니다.');
-                            }
-                        } catch (err) {
-                            alert('파일을 읽는 중 오류가 발생했습니다.');
-                        }
-                    };
-                }
-            };
-
-            const exportCSV = () => {
-                let csvContent = "\uFEFF";
-                csvContent += "작품명,작가명,구매날짜,정가,실제구매가,구매할인액,현재시세,시세손익,수익률(%),시세확인일,구매처,크기,재료,보증서유무,메모\n";
-
-                artworks.forEach(item => {
-                    const list = Number(item.listPrice) || Number(item.purchasePrice) || 0;
-                    const buy = Number(item.purchasePrice) || 0;
-                    const save = list > buy ? list - buy : 0;
-                    const current = Number(item.currentPrice) || buy;
-                    const diff = current - buy;
-                    const roi = buy > 0 ? ((diff / buy) * 100).toFixed(1) : '0.0';
-
-                    const row = [
-                        `"${(item.title || '').replace(/"/g, '""')}"`,
-                        `"${(item.artist || '').replace(/"/g, '""')}"`,
-                        `"${item.purchaseDate || ''}"`,
-                        list,
-                        buy,
-                        save,
-                        current,
-                        diff,
-                        `${roi}%`,
-                        `"${item.priceUpdateDate || item.purchaseDate || ''}"`,
-                        `"${(item.gallery || '').replace(/"/g, '""')}"`,
-                        `"${(item.size || '').replace(/"/g, '""')}"`,
-                        `"${(item.medium || '').replace(/"/g, '""')}"`,
-                        item.coaAttached ? "보유" : "미보유",
-                        `"${(item.notes || '').replace(/"/g, '""')}"`
-                    ].join(",");
-                    csvContent += row + "\n";
-                });
-
-                const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", `미술품_컬렉션_목록_${new Date().toISOString().slice(0,10)}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
-            };
-
-            const handleImageUpload = async (e, type) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const compressed = await compressImage(file);
-                    setFormData(prev => ({ ...prev, [type]: compressed }));
-                }
-            };
-
-            const openAddNew = () => {
-                setEditingId(null);
-                const today = new Date().toISOString().slice(0, 10);
-                setFormData({
-                    title: '', artist: '', purchaseDate: today, listPrice: '', purchasePrice: '',
-                    currentPrice: '', priceUpdateDate: today, medium: '', size: '', gallery: '',
-                    status: 'Owned', coaAttached: true, frontImage: '', backImage: '', notes: ''
-                });
-                setIsModalOpen(true);
-            };
-
-            const openEdit = (art) => {
-                setEditingId(art.id);
-                setFormData({
-                    ...art,
-                    listPrice: art.listPrice || art.purchasePrice,
-                    currentPrice: art.currentPrice || art.purchasePrice,
-                    priceUpdateDate: art.priceUpdateDate || art.purchaseDate
-                });
-                setSelectedArt(null);
-                setIsModalOpen(true);
-            };
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                const buyPrice = Number(formData.purchasePrice) || 0;
-                const listP = formData.listPrice !== '' ? Number(formData.listPrice) : buyPrice;
-                const currPrice = formData.currentPrice !== '' ? Number(formData.currentPrice) : buyPrice;
-
-                const itemToSave = {
-                    ...formData,
-                    id: editingId ? editingId : Date.now().toString(),
-                    listPrice: listP,
-                    purchasePrice: buyPrice,
-                    currentPrice: currPrice
-                };
-
-                await saveArtworkToDB(itemToSave);
-
-                if (editingId) {
-                    setArtworks(artworks.map(item => item.id === editingId ? itemToSave : item));
-                } else {
-                    setArtworks([itemToSave, ...artworks]);
-                }
-                setIsModalOpen(false);
-            };
-
-            const handleQuickPriceUpdate = async (e) => {
-                e.preventDefault();
-                if (!selectedArt) return;
-                const updatedPrice = Number(quickPrice);
-                const updatedItem = {
-                    ...selectedArt,
-                    currentPrice: updatedPrice,
-                    priceUpdateDate: quickPriceDate
-                };
-
-                await saveArtworkToDB(updatedItem);
-
-                setArtworks(artworks.map(item => item.id === selectedArt.id ? updatedItem : item));
-                setSelectedArt(updatedItem);
-                setIsPriceUpdateModalOpen(false);
-            };
-
-            const handleDelete = async (id) => {
-                if (confirm('정말 삭제하시겠습니까?')) {
-                    await deleteArtworkFromDB(id);
-                    setArtworks(artworks.filter(a => a.id !== id));
-                    setSelectedArt(null);
-                }
-            };
-
-            const getDiscountInfo = (listPrice, purchasePrice) => {
-                const list = Number(listPrice) || 0;
-                const buy = Number(purchasePrice) || 0;
-                if (list > buy && buy > 0) {
-                    const save = list - buy;
-                    const rate = ((save / list) * 100).toFixed(1);
-                    return { save, rate };
-                }
-                return null;
-            };
-
-            const getValuationInfo = (purchasePrice, currentPrice) => {
-                const buy = Number(purchasePrice) || 0;
-                const current = Number(currentPrice) || buy;
-                const diff = current - buy;
-                if (diff === 0 || buy === 0) return null;
-                const rate = ((diff / buy) * 100).toFixed(1);
-                return { diff, rate, isUp: diff > 0 };
-            };
-
-            if (isLoading) {
-                return (
-                    <div className="min-h-screen flex flex-col items-center justify-center bg-stone-900 text-amber-400">
-                        <div className="text-xl font-bold font-serif-kr animate-pulse">ARTHOUSE Vault 로딩 중...</div>
-                        <div className="text-xs text-stone-400 mt-2">대용량 보관소를 준비하는 중입니다</div>
-                    </div>
-                );
-            }
-
-            return (
-                <div className="min-h-screen pb-12">
-                    {/* 헤더 영역 */}
-                    <header className="bg-stone-900 text-stone-100 p-6 shadow-md mb-8">
-                        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-                            <div>
-                                <h1 className="text-2xl font-bold font-serif-kr text-amber-400">ARTHOUSE Vault</h1>
-                                <p className="text-xs text-stone-400">마이 미술품 컬렉션 관리 대시보드 (IndexedDB 무제한 저장소)</p>
-                            </div>
-                            
-                            <div className="flex flex-wrap gap-2 items-center">
-                                <button onClick={exportJSON} className="bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1 transition">
-                                    💾 데이터 백업
-                                </button>
-                                <button onClick={() => fileInputRef.current.click()} className="bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1 transition">
-                                    📂 백업 복원
-                                </button>
-                                <input type="file" ref={fileInputRef} onChange={importJSON} accept=".json" className="hidden" />
-
-                                <button onClick={exportCSV} className="bg-emerald-800 hover:bg-emerald-700 text-emerald-100 text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1 transition">
-                                    📊 엑셀 (CSV) 추출
-                                </button>
-
-                                <button onClick={openAddNew} className="bg-amber-500 hover:bg-amber-600 text-stone-900 px-4 py-2 rounded-lg font-semibold flex items-center gap-1 text-sm shadow ml-2">
-                                    + 새 작품 등록
-                                </button>
-                            </div>
-                        </div>
-                    </header>
-
-                    <main className="max-w-7xl mx-auto px-4">
-                        {/* 대시보드 통계 카드 */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                            <div className="bg-white p-5 rounded-xl border border-stone-200 shadow-sm">
-                                <span className="text-xs font-semibold text-stone-500">총 구매 매입가</span>
-                                <div className="text-xl font-bold font-serif-kr text-stone-900 mt-1">₩ {stats.totalCost.toLocaleString()}</div>
-                                <span className="text-[11px] text-stone-400">실제 지출 총액</span>
-                            </div>
-
-                            <div className="bg-white p-5 rounded-xl border border-stone-200 shadow-sm border-l-4 border-l-amber-500">
-                                <span className="text-xs font-semibold text-stone-500">총 현재 평가 시세</span>
-                                <div className="text-xl font-bold font-serif-kr text-stone-900 mt-1">₩ {stats.totalCurrentValue.toLocaleString()}</div>
-                                <span className="text-[11px] text-amber-600 font-medium">추정 시세 합계</span>
-                            </div>
-
-                            <div className="bg-white p-5 rounded-xl border border-stone-200 shadow-sm">
-                                <span className="text-xs font-semibold text-stone-500">시세 평가 손익 (수익률)</span>
-                                <div className={`text-xl font-bold font-serif-kr mt-1 ${stats.totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                    {stats.totalProfit >= 0 ? '+' : ''}₩ {stats.totalProfit.toLocaleString()}
-                                    <span className="text-xs ml-1 font-sans">({stats.totalProfit >= 0 ? '+' : ''}{stats.roiRate}%)</span>
-                                </div>
-                                <span className="text-[11px] text-stone-400">구매가 대비 시세 변동</span>
-                            </div>
-
-                            <div className="bg-white p-5 rounded-xl border border-stone-200 shadow-sm">
-                                <span className="text-xs font-semibold text-stone-500">소장 작품 수</span>
-                                <div className="text-xl font-bold font-serif-kr text-stone-900 mt-1">{stats.count} 점</div>
-                                <span className="text-[11px] text-amber-700 font-medium">평균 구매 할인율 {stats.discount}%</span>
-                            </div>
-                        </div>
-
-                        {/* 검색 및 검색 필터 */}
-                        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
-                            <div className="flex gap-2">
-                                {['Owned', 'Wishlist', 'All'].map(status => (
-                                    <button key={status} onClick={() => setFilterStatus(status)} className={`px-4 py-2 rounded-lg text-sm font-medium ${filterStatus === status ? 'bg-stone-900 text-white' : 'bg-white border text-stone-600 hover:bg-stone-50'}`}>
-                                        {status === 'Owned' ? '소장품' : status === 'Wishlist' ? '위시리스트' : '전체'}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="flex gap-4 w-full md:w-auto">
-                                <input type="text" placeholder="작품명, 작가명, 갤러리 검색..." value={search} onChange={e => setSearch(e.target.value)} className="px-4 py-2 border rounded-lg text-sm w-full md:w-64" />
-                                <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="px-4 py-2 border rounded-lg text-sm bg-white">
-                                    <option value="dateDesc">최근 구매일순</option>
-                                    <option value="dateAsc">오래된 구매일순</option>
-                                    <option value="priceDesc">높은 가격순</option>
-                                    <option value="priceAsc">낮은 가격순</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* 작품 리스트 그리드 */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                            {filteredArtworks.map(item => {
-                                const discount = getDiscountInfo(item.listPrice, item.purchasePrice);
-                                const valuation = getValuationInfo(item.purchasePrice, item.currentPrice);
-                                return (
-                                    <div key={item.id} onClick={() => { setSelectedArt(item); setViewImageTab('front'); }} className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col relative">
-                                        
-                                        {/* 할인 뱃지 & 시세상승 뱃지 */}
-                                        <div className="absolute top-2 right-2 flex flex-col items-end gap-1 z-10">
-                                            {discount && (
-                                                <div className="bg-amber-500 text-stone-900 font-bold text-[10px] px-2 py-0.5 rounded-full shadow">
-                                                    {discount.rate}% 할인구매
-                                                </div>
-                                            )}
-                                            {valuation && (
-                                                <div className={`text-white font-bold text-[10px] px-2 py-0.5 rounded-full shadow ${valuation.isUp ? 'bg-emerald-600' : 'bg-rose-600'}`}>
-                                                    {valuation.isUp ? '▲' : '▼'} 시세 {valuation.isUp ? '+' : ''}{valuation.rate}%
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="bg-stone-100 min-h-[200px] flex items-center justify-center overflow-hidden">
-                                            <img src={item.frontImage || 'https://via.placeholder.com/400x300?text=No+Image'} alt={item.title} className="w-full h-auto max-h-64 object-contain" />
-                                        </div>
-                                        <div className="p-4 flex-1 flex flex-col justify-between">
-                                            <div>
-                                                <span className="text-xs font-semibold text-stone-400">{item.artist}</span>
-                                                <h3 className="font-bold text-stone-800 text-base font-serif-kr mt-0.5">{item.title}</h3>
-                                                <p className="text-xs text-stone-500 mt-1">{item.size || '규격 미기재'}</p>
-                                            </div>
-                                            <div className="mt-4 pt-2 border-t border-stone-100 flex justify-between items-end">
-                                                <div>
-                                                    <span className="text-[10px] text-stone-400 block">구매가</span>
-                                                    <span className="font-semibold text-stone-600 text-xs">₩ {Number(item.purchasePrice).toLocaleString()}</span>
-                                                </div>
-                                                <div className="text-right">
-                                                    <span className="text-[10px] text-amber-600 block font-semibold">현재 시세</span>
-                                                    <span className="font-bold text-stone-900 text-sm">₩ {Number(item.currentPrice || item.purchasePrice).toLocaleString()}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </main>
-
-                    {/* 작품 상세 모달 */}
-                    {selectedArt && (
-                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
-                                <button onClick={() => setSelectedArt(null)} className="absolute top-4 right-4 text-stone-400 hover:text-stone-600 text-xl font-bold">✕</button>
-                                
-                                <div className="flex gap-2 border-b pb-2 mb-4">
-                                    <button onClick={() => setViewImageTab('front')} className={`px-3 py-1 text-xs font-bold rounded ${viewImageTab === 'front' ? 'bg-stone-900 text-white' : 'bg-stone-100'}`}>그림 앞면</button>
-                                    {selectedArt.backImage && (
-                                        <button onClick={() => setViewImageTab('back')} className={`px-3 py-1 text-xs font-bold rounded ${viewImageTab === 'back' ? 'bg-stone-900 text-white' : 'bg-stone-100'}`}>그림 뒷면 (서명/태그)</button>
-                                    )}
-                                </div>
-
-                                <div className="bg-stone-100 rounded-xl p-4 flex justify-center mb-6">
-                                    <img src={viewImageTab === 'front' ? selectedArt.frontImage : selectedArt.backImage} className="max-h-96 object-contain rounded" />
-                                </div>
-
-                                <h2 className="text-2xl font-bold font-serif-kr">{selectedArt.title}</h2>
-                                <p className="text-stone-500 text-sm mb-4">{selectedArt.artist}</p>
-
-                                <div className="grid grid-cols-2 gap-4 text-sm bg-stone-50 p-4 rounded-xl mb-4">
-                                    <div><span className="text-stone-400">구매일:</span> {selectedArt.purchaseDate}</div>
-                                    <div><span className="text-stone-400">구매처:</span> {selectedArt.gallery}</div>
-                                    <div><span className="text-stone-400">크기:</span> {selectedArt.size}</div>
-                                    <div><span className="text-stone-400">재료/기법:</span> {selectedArt.medium}</div>
-                                    <div><span className="text-stone-400">정가 (갤러리가):</span> ₩ {Number(selectedArt.listPrice || selectedArt.purchasePrice).toLocaleString()}</div>
-                                    <div><span className="text-stone-400">실제 매입가:</span> <b>₩ {Number(selectedArt.purchasePrice).toLocaleString()}</b></div>
-                                    <div className="col-span-2 pt-2 border-t flex justify-between items-center">
-                                        <span className="text-stone-400">현재 추정 시세:</span>
-                                        <b className="text-amber-600 text-base">₩ {Number(selectedArt.currentPrice || selectedArt.purchasePrice).toLocaleString()}</b>
-                                    </div>
-                                </div>
-
-                                {/* 구매 시 할인 정보 */}
-                                {getDiscountInfo(selectedArt.listPrice, selectedArt.purchasePrice) && (
-                                    <div className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-200 mb-3 flex justify-between font-bold">
-                                        <span>정가 대비 구매 할인 혜택:</span>
-                                        <span>₩ {getDiscountInfo(selectedArt.listPrice, selectedArt.purchasePrice).save.toLocaleString()} 절감 ({getDiscountInfo(selectedArt.listPrice, selectedArt.purchasePrice).rate}% 할인)</span>
-                                    </div>
-                                )}
-
-                                {/* 시세 가치 상승 정보 */}
-                                {getValuationInfo(selectedArt.purchasePrice, selectedArt.currentPrice) && (
-                                    <div className={`text-xs p-3 rounded-lg border mb-4 flex justify-between font-bold ${getValuationInfo(selectedArt.purchasePrice, selectedArt.currentPrice).isUp ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'}`}>
-                                        <span>구매 후 시세 변동 및 가치 상승:</span>
-                                        <span>
-                                            {getValuationInfo(selectedArt.purchasePrice, selectedArt.currentPrice).isUp ? '+' : ''}
-                                            ₩ {getValuationInfo(selectedArt.purchasePrice, selectedArt.currentPrice).diff.toLocaleString()}
-                                            ({getValuationInfo(selectedArt.purchasePrice, selectedArt.currentPrice).isUp ? '+' : ''}{getValuationInfo(selectedArt.purchasePrice, selectedArt.currentPrice).rate}%)
-                                        </span>
-                                    </div>
-                                )}
-
-                                {selectedArt.notes && (
-                                    <div className="text-xs text-stone-600 bg-stone-100 p-3 rounded-lg border border-stone-200 mb-6">
-                                        <b>메모:</b> {selectedArt.notes}
-                                    </div>
-                                )}
-
-                                <div className="flex justify-between items-center pt-2 border-t">
-                                    <button onClick={() => {
-                                        setQuickPrice(selectedArt.currentPrice || selectedArt.purchasePrice);
-                                        setQuickPriceDate(new Date().toISOString().slice(0, 10));
-                                        setIsPriceUpdateModalOpen(true);
-                                    }} className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1">
-                                        📈 시세가 업데이트
-                                    </button>
-
-                                    <div className="flex gap-2">
-                                        <button onClick={() => openEdit(selectedArt)} className="px-4 py-2 bg-amber-500 text-stone-900 rounded-lg text-xs font-bold hover:bg-amber-600">수정하기</button>
-                                        <button onClick={() => handleDelete(selectedArt.id)} className="px-4 py-2 bg-red-100 text-red-600 rounded-lg text-xs font-bold hover:bg-red-200">삭제하기</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 빠른 시세 변경 모달 */}
-                    {isPriceUpdateModalOpen && selectedArt && (
-                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-                            <div className="bg-white rounded-xl max-w-sm w-full p-6 relative">
-                                <h3 className="font-bold text-lg mb-2 font-serif-kr">현재 시세 업데이트</h3>
-                                <p className="text-xs text-stone-500 mb-4">{selectedArt.title} ({selectedArt.artist})</p>
-                                
-                                <form onSubmit={handleQuickPriceUpdate} className="space-y-4 text-sm">
-                                    <div>
-                                        <label className="block text-xs font-semibold text-stone-600 mb-1">변경할 현재 시세 (원)</label>
-                                        <input required type="number" value={quickPrice} onChange={e => setQuickPrice(e.target.value)} className="w-full border p-2 rounded-lg font-bold text-stone-900" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-stone-600 mb-1">시세 확인 날짜</label>
-                                        <input required type="date" value={quickPriceDate} onChange={e => setQuickPriceDate(e.target.value)} className="w-full border p-2 rounded-lg text-xs" />
-                                    </div>
-
-                                    <div className="flex justify-end gap-2 pt-2">
-                                        <button type="button" onClick={() => setIsPriceUpdateModalOpen(false)} className="px-3 py-1.5 border rounded-lg text-xs">취소</button>
-                                        <button type="submit" className="px-4 py-1.5 bg-emerald-600 text-white font-bold rounded-lg text-xs hover:bg-emerald-700">시세 저장</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 등록/수정 모달 */}
-                    {isModalOpen && (
-                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
-                                <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 text-stone-400 text-xl font-bold">✕</button>
-                                <h2 className="text-xl font-bold font-serif-kr mb-4">{editingId ? '작품 정보 수정' : '새 미술품 등록'}</h2>
-                                
-                                <form onSubmit={handleSubmit} className="space-y-4 text-sm">
-                                    <div>
-                                        <label className="block font-semibold mb-1">작품명 *</label>
-                                        <input required type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full border p-2 rounded-lg" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block font-semibold mb-1">작가명 *</label>
-                                            <input required type="text" value={formData.artist} onChange={e => setFormData({...formData, artist: e.target.value})} className="w-full border p-2 rounded-lg" />
-                                        </div>
-                                        <div>
-                                            <label className="block font-semibold mb-1">구매 날짜 *</label>
-                                            <input required type="date" value={formData.purchaseDate} onChange={e => setFormData({...formData, purchaseDate: e.target.value})} className="w-full border p-2 rounded-lg" />
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block font-semibold mb-1">정가 (갤러리 제시가)</label>
-                                            <input type="number" value={formData.listPrice} onChange={e => setFormData({...formData, listPrice: e.target.value})} className="w-full border p-2 rounded-lg" placeholder="할인 전 금액" />
-                                        </div>
-                                        <div>
-                                            <label className="block font-semibold mb-1">실제 구매가 (매입가) *</label>
-                                            <input required type="number" value={formData.purchasePrice} onChange={e => setFormData({...formData, purchasePrice: e.target.value})} className="w-full border p-2 rounded-lg" placeholder="원" />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block font-semibold mb-1 text-amber-700">현재 추정 시세</label>
-                                        <input type="number" value={formData.currentPrice} onChange={e => setFormData({...formData, currentPrice: e.target.value})} className="w-full border p-2 rounded-lg border-amber-300 bg-amber-50/30" placeholder="미입력시 매입가로 유지됩니다" />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block font-semibold mb-1">구매처 (갤러리명)</label>
-                                            <input type="text" value={formData.gallery} onChange={e => setFormData({...formData, gallery: e.target.value})} className="w-full border p-2 rounded-lg" />
-                                        </div>
-                                        <div>
-                                            <label className="block font-semibold mb-1">작품 크기 (호수)</label>
-                                            <input type="text" value={formData.size} onChange={e => setFormData({...formData, size: e.target.value})} className="w-full border p-2 rounded-lg" />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block font-semibold mb-1">재료 및 기법</label>
-                                        <input type="text" value={formData.medium} onChange={e => setFormData({...formData, medium: e.target.value})} className="w-full border p-2 rounded-lg" />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4 pt-2">
-                                        <div>
-                                            <label className="block font-semibold mb-1">그림 앞면 사진</label>
-                                            <input type="file" accept="image/*" onChange={e => handleImageUpload(e, 'frontImage')} className="w-full text-xs" />
-                                        </div>
-                                        <div>
-                                            <label className="block font-semibold mb-1">그림 뒷면 사진 (선택)</label>
-                                            <input type="file" accept="image/*" onChange={e => handleImageUpload(e, 'backImage')} className="w-full text-xs" />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block font-semibold mb-1">비고 및 메모</label>
-                                        <textarea value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full border p-2 rounded-lg h-16"></textarea>
-                                    </div>
-
-                                    <button type="submit" className="w-full bg-stone-900 text-white font-bold py-3 rounded-xl hover:bg-stone-800 transition mt-4">
-                                        {editingId ? '수정사항 저장하기' : '작품 저장하기'}
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
         }
 
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+        async function loadArtworks() {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.getAll();
+                req.onsuccess = () => {
+                    artworks = req.result || [];
+                    resolve();
+                };
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function saveArtworkToDB(art) {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.put(art);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function deleteArtworkFromDB(id) {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.delete(id);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        // App Initialization
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await initDB();
+                await loadArtworks();
+                updateAdminUI();
+                renderApp();
+            } catch (err) {
+                console.error("DB Initialization Error:", err);
+            }
+        });
+
+        // Admin Lock/Unlock Logic
+        function toggleAdminModal() {
+            if (isAdmin) {
+                isAdmin = false;
+                updateAdminUI();
+                renderApp();
+            } else {
+                document.getElementById('adminPasswordInput').value = '';
+                document.getElementById('authModal').classList.remove('hidden');
+            }
+        }
+
+        function closeAdminModal() {
+            document.getElementById('authModal').classList.add('hidden');
+        }
+
+        function verifyAdmin() {
+            const inputPw = document.getElementById('adminPasswordInput').value;
+            if (inputPw === adminPassword) {
+                isAdmin = true;
+                closeAdminModal();
+                updateAdminUI();
+                renderApp();
+            } else {
+                alert('비밀번호가 올바르지 않습니다.');
+            }
+        }
+
+        function updateAdminUI() {
+            const btnText = document.getElementById('adminBtnText');
+            const authBtn = document.getElementById('adminAuthBtn');
+            if (isAdmin) {
+                document.body.classList.add('is-admin');
+                btnText.textContent = '로그아웃';
+                authBtn.classList.replace('bg-slate-800', 'bg-red-600');
+                authBtn.classList.replace('hover:bg-slate-700', 'hover:bg-red-700');
+            } else {
+                document.body.classList.remove('is-admin');
+                btnText.textContent = '관리자 로그인';
+                authBtn.classList.replace('bg-red-600', 'bg-slate-800');
+                authBtn.classList.replace('hover:bg-red-700', 'hover:bg-slate-700');
+            }
+        }
+
+        function openChangePasswordModal() {
+            document.getElementById('curPwInput').value = '';
+            document.getElementById('newPwInput').value = '';
+            document.getElementById('changePwModal').classList.remove('hidden');
+        }
+
+        function closeChangePasswordModal() {
+            document.getElementById('changePwModal').classList.add('hidden');
+        }
+
+        function saveNewPassword() {
+            const curPw = document.getElementById('curPwInput').value;
+            const newPw = document.getElementById('newPwInput').value;
+            if (curPw !== adminPassword) {
+                alert('현재 비밀번호가 올바르지 않습니다.');
+                return;
+            }
+            if (!newPw) {
+                alert('새 비밀번호를 입력해주세요.');
+                return;
+            }
+            adminPassword = newPw;
+            localStorage.setItem('artVault_password', newPw);
+            alert('비밀번호가 성공적으로 변경되었습니다.');
+            closeChangePasswordModal();
+        }
+
+        // Render Main View & Dashboard
+        function renderApp() {
+            populateGalleryFilter();
+            calculateDashboardStats();
+
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const genre = document.getElementById('genreFilter').value;
+            const gallery = document.getElementById('galleryFilter').value;
+
+            const filtered = artworks.filter(a => {
+                const matchSearch = (a.artist && a.artist.toLowerCase().includes(search)) ||
+                                    (a.title && a.title.toLowerCase().includes(search)) ||
+                                    (a.medium && a.medium.toLowerCase().includes(search));
+                const matchGenre = genre ? a.genre === genre : true;
+                const matchGallery = gallery ? a.gallery === gallery : true;
+                return matchSearch && matchGenre && matchGallery;
+            });
+
+            const container = document.getElementById('artworkContainer');
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="text-center py-16 text-slate-400 bg-white rounded-2xl border border-dashed"><i class="fa-solid fa-palette text-4xl mb-2"></i><p>등록된 작품이 없거나 검색 결과가 없습니다.</p></div>`;
+                return;
+            }
+
+            if (viewMode === 'grid') {
+                renderGrid(filtered, container);
+            } else {
+                renderList(filtered, container);
+            }
+        }
+
+        function populateGalleryFilter() {
+            const select = document.getElementById('galleryFilter');
+            const currentVal = select.value;
+            const galleries = [...new Set(artworks.map(a => a.gallery).filter(Boolean))];
+            select.innerHTML = '<option value="">전체 구입 갤러리</option>';
+            galleries.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                if (g === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        function calculateDashboardStats() {
+            document.getElementById('statTotalCount').textContent = `${artworks.length}점`;
+            let totalPurchase = 0;
+            let totalCurrent = 0;
+
+            artworks.forEach(a => {
+                totalPurchase += Number(a.purchasePrice) || 0;
+                totalCurrent += Number(a.currentPrice) || Number(a.purchasePrice) || 0;
+            });
+
+            const diff = totalCurrent - totalPurchase;
+            const rate = totalPurchase > 0 ? ((diff / totalPurchase) * 100).toFixed(1) : 0;
+
+            document.getElementById('statTotalPurchase').textContent = `₩${totalPurchase.toLocaleString()}`;
+            document.getElementById('statTotalCurrent').textContent = `₩${totalCurrent.toLocaleString()}`;
+            
+            const profitElem = document.getElementById('statTotalProfit');
+            profitElem.textContent = `₩${diff >= 0 ? '+' : ''}${diff.toLocaleString()} (${rate >= 0 ? '+' : ''}${rate}%)`;
+            profitElem.className = `text-2xl font-bold ${diff >= 0 ? 'text-emerald-600' : 'text-red-600'}`;
+        }
+
+        function renderGrid(items, container) {
+            container.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6";
+            container.innerHTML = items.map(art => {
+                const purchase = Number(art.purchasePrice) || 0;
+                const current = Number(art.currentPrice) || purchase;
+                const diff = current - purchase;
+                const rate = purchase > 0 ? ((diff / purchase) * 100).toFixed(1) : 0;
+
+                return `
+                <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col">
+                    <div class="relative bg-slate-100 h-64 overflow-hidden group">
+                        <img src="${art.frontImg || 'https://via.placeholder.com/400x400?text=No+Image'}" id="img-front-${art.id}" class="w-full h-full object-cover">
+                        ${art.backImg ? `
+                        <img src="${art.backImg}" id="img-back-${art.id}" class="w-full h-full object-cover hidden">
+                        <div class="absolute top-2 right-2 bg-slate-900/70 text-white text-[10px] px-2 py-1 rounded-full backdrop-blur-sm flex gap-1">
+                            <button onclick="switchImg('${art.id}', 'front')" class="hover:underline font-bold">앞면</button> |
+                            <button onclick="switchImg('${art.id}', 'back')" class="hover:underline font-bold">뒷면</button>
+                        </div>
+                        ` : ''}
+                        <span class="absolute top-2 left-2 bg-indigo-600 text-white text-[10px] font-semibold px-2 py-0.5 rounded-md shadow">${art.genre || '기타'}</span>
+                    </div>
+
+                    <div class="p-4 flex-1 flex flex-col justify-between space-y-3">
+                        <div>
+                            <div class="text-xs text-slate-500 font-medium mb-0.5">${art.artist || '미상'}</div>
+                            <h4 class="font-bold text-slate-900 text-base leading-snug">${art.title || '무제'} ${art.year ? `<span class="font-normal text-slate-400 text-xs">(${art.year})</span>` : ''}</h4>
+                            <p class="text-xs text-slate-500 mt-1">${art.size || ''} ${art.medium ? `• ${art.medium}` : ''}</p>
+                        </div>
+
+                        <!-- Admin Only Price Block -->
+                        <div class="admin-only border-t pt-2 space-y-1">
+                            <div class="flex justify-between items-baseline text-xs">
+                                <span class="text-slate-400">구입가</span>
+                                <span class="font-medium text-slate-700">₩${purchase.toLocaleString()}</span>
+                            </div>
+                            <div class="flex justify-between items-baseline">
+                                <span class="text-xs text-slate-400">현재 평가가</span>
+                                <span class="font-bold text-indigo-600 text-sm">₩${current.toLocaleString()}</span>
+                            </div>
+                            <div class="flex justify-between items-center text-[11px] pt-1 border-t border-dashed">
+                                <span class="text-slate-400">수익률</span>
+                                <span class="font-semibold ${diff >= 0 ? 'text-emerald-600' : 'text-red-600'}">
+                                    ${diff >= 0 ? '▲' : '▼'} ₩${Math.abs(diff).toLocaleString()} (${rate}%)
+                                </span>
+                            </div>
+                            ${art.gallery ? `<div class="text-[11px] text-slate-400 text-right">🏛️ ${art.gallery}</div>` : ''}
+                        </div>
+
+                        <!-- Admin Actions -->
+                        <div class="admin-only flex items-center justify-end gap-2 pt-2 border-t">
+                            <button onclick="openHistoryModal('${art.id}')" class="text-xs text-slate-500 hover:text-indigo-600 p-1" title="시세 추적"><i class="fa-solid fa-chart-line"></i></button>
+                            <button onclick="editArtwork('${art.id}')" class="text-xs text-slate-500 hover:text-amber-600 p-1" title="수정"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteArtwork('${art.id}')" class="text-xs text-slate-500 hover:text-red-600 p-1" title="삭제"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function renderList(items, container) {
+            container.className = "bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm";
+            container.innerHTML = `
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left text-slate-600">
+                    <thead class="bg-slate-50 text-slate-700 border-b">
+                        <tr>
+                            <th class="p-3">이미지</th>
+                            <th class="p-3">작가명</th>
+                            <th class="p-3">작품명</th>
+                            <th class="p-3">크기 / 재료</th>
+                            <th class="p-3 admin-only">구입가</th>
+                            <th class="p-3 admin-only">현재 평가가</th>
+                            <th class="p-3 admin-only">손익 (수익률)</th>
+                            <th class="p-3 admin-only">구입 갤러리</th>
+                            <th class="p-3 text-right admin-only">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        ${items.map(art => {
+                            const purchase = Number(art.purchasePrice) || 0;
+                            const current = Number(art.currentPrice) || purchase;
+                            const diff = current - purchase;
+                            const rate = purchase > 0 ? ((diff / purchase) * 100).toFixed(1) : 0;
+                            return `
+                            <tr class="hover:bg-slate-50">
+                                <td class="p-3">
+                                    <img src="${art.frontImg || 'https://via.placeholder.com/100'}" class="w-12 h-12 object-cover rounded-lg border">
+                                </td>
+                                <td class="p-3 font-semibold text-slate-900">${art.artist || '-'}</td>
+                                <td class="p-3 font-medium text-slate-800">${art.title \vert{}\vert{} '-'}${art.year ? `<span class="text-slate-400">(${art.year})</span>` : ''}</td>
+                                <td class="p-3">${art.size || '-'} <br><span class="text-slate-400">${art.medium || ''}</span></td>
+                                <td class="p-3 admin-only">₩${purchase.toLocaleString()}</td>
+                                <td class="p-3 admin-only font-bold text-indigo-600">₩${current.toLocaleString()}</td>
+                                <td class="p-3 admin-only font-semibold ${diff >= 0 ? 'text-emerald-600' : 'text-red-600'}">
+                                    ₩${diff.toLocaleString()} (${rate}%)
+                                </td>
+                                <td class="p-3 admin-only">${art.gallery || '-'}</td>
+                                <td class="p-3 text-right space-x-1 admin-only">
+                                    <button onclick="openHistoryModal('${art.id}')" class="p-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-chart-line"></i></button>
+                                    <button onclick="editArtwork('${art.id}')" class="p-1 text-slate-400 hover:text-amber-600"><i class="fa-solid fa-pen"></i></button>
+                                    <button onclick="deleteArtwork('${art.id}')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash"></i></button>
+                                </td>
+                            </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            `;
+        }
+
+        function switchImg(id, type) {
+            const front = document.getElementById(`img-front-${id}`);
+            const back = document.getElementById(`img-back-${id}`);
+            if (!front || !back) return;
+            if (type === 'front') {
+                front.classList.remove('hidden');
+                back.classList.add('hidden');
+            } else {
+                front.classList.add('hidden');
+                back.classList.remove('hidden');
+            }
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            document.getElementById('btnViewGrid').className = `p-2 border rounded-lg ${mode === 'grid' ? 'bg-slate-100 text-indigo-600 font-bold' : 'text-slate-600'}`;
+            document.getElementById('btnViewList').className = `p-2 border rounded-lg ${mode === 'list' ? 'bg-slate-100 text-indigo-600 font-bold' : 'text-slate-600'}`;
+            renderApp();
+        }
+
+        // Add / Edit Modal Logic
+        let currentFrontBase64 = '';
+        let currentBackBase64 = '';
+
+        function openAddModal() {
+            document.getElementById('artForm').reset();
+            document.getElementById('artId').value = '';
+            document.getElementById('artModalTitle').textContent = '작품 정보 등록';
+            document.getElementById('frontImgPreview').innerHTML = '<span class="text-xs text-slate-400">이미지 없음</span>';
+            document.getElementById('backImgPreview').innerHTML = '<span class="text-xs text-slate-400">이미지 없음</span>';
+            currentFrontBase64 = '';
+            currentBackBase64 = '';
+            document.getElementById('artModal').classList.remove('hidden');
+        }
+
+        function closeArtModal() {
+            document.getElementById('artModal').classList.add('hidden');
+        }
+
+        // Image file reading
+        document.getElementById('frontImgInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    currentFrontBase64 = evt.target.result;
+                    document.getElementById('frontImgPreview').innerHTML = `<img src="${currentFrontBase64}" class="h-full object-contain">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('backImgInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    currentBackBase64 = evt.target.result;
+                    document.getElementById('backImgPreview').innerHTML = `<img src="${currentBackBase64}" class="h-full object-contain">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        function calcDiscount() {
+            const list = Number(document.getElementById('listPrice').value) || 0;
+            const buy = Number(document.getElementById('purchasePrice').value) || 0;
+            const display = document.getElementById('discountDisplay');
+
+            if (list > 0 && buy > 0) {
+                const discount = list - buy;
+                const rate = ((discount / list) * 100).toFixed(1);
+                display.value = `${rate}% (₩${discount.toLocaleString()} 할인)`;
+            } else {
+                display.value = '';
+            }
+        }
+
+        async function handleArtSubmit(e) {
+            e.preventDefault();
+            const id = document.getElementById('artId').value || 'art_' + Date.now();
+            const existing = artworks.find(a => a.id === id) || {};
+
+            const artworkData = {
+                id: id,
+                artist: document.getElementById('artist').value,
+                title: document.getElementById('title').value,
+                year: document.getElementById('year').value,
+                size: document.getElementById('size').value,
+                medium: document.getElementById('medium').value,
+                genre: document.getElementById('genre').value,
+                listPrice: document.getElementById('listPrice').value,
+                purchasePrice: document.getElementById('purchasePrice').value,
+                currentPrice: document.getElementById('currentPrice').value || document.getElementById('purchasePrice').value,
+                gallery: document.getElementById('gallery').value,
+                purchaseDate: document.getElementById('purchaseDate').value,
+                notes: document.getElementById('notes').value,
+                frontImg: currentFrontBase64 || existing.frontImg || '',
+                backImg: currentBackBase64 || existing.backImg || '',
+                history: existing.history || []
+            };
+
+            await saveArtworkToDB(artworkData);
+            await loadArtworks();
+            closeArtModal();
+            renderApp();
+        }
+
+        function editArtwork(id) {
+            const art = artworks.find(a => a.id === id);
+            if (!art) return;
+
+            document.getElementById('artId').value = art.id;
+            document.getElementById('artist').value = art.artist || '';
+            document.getElementById('title').value = art.title || '';
+            document.getElementById('year').value = art.year || '';
+            document.getElementById('size').value = art.size || '';
+            document.getElementById('medium').value = art.medium || '';
+            document.getElementById('genre').value = art.genre || '서양화';
+            document.getElementById('listPrice').value = art.listPrice || '';
+            document.getElementById('purchasePrice').value = art.purchasePrice || '';
+            document.getElementById('currentPrice').value = art.currentPrice || '';
+            document.getElementById('gallery').value = art.gallery || '';
+            document.getElementById('purchaseDate').value = art.purchaseDate || '';
+            document.getElementById('notes').value = art.notes || '';
+
+            currentFrontBase64 = art.frontImg || '';
+            currentBackBase64 = art.backImg || '';
+
+            document.getElementById('frontImgPreview').innerHTML = currentFrontBase64 ? `<img src="${currentFrontBase64}" class="h-full object-contain">` : '<span class="text-xs text-slate-400">이미지 없음</span>';
+            document.getElementById('backImgPreview').innerHTML = currentBackBase64 ? `<img src="${currentBackBase64}" class="h-full object-contain">` : '<span class="text-xs text-slate-400">이미지 없음</span>';
+
+            calcDiscount();
+            document.getElementById('artModalTitle').textContent = '작품 정보 수정';
+            document.getElementById('artModal').classList.remove('hidden');
+        }
+
+        async function deleteArtwork(id) {
+            if (confirm('이 작품 정보를 정말 삭제하시겠습니까?')) {
+                await deleteArtworkFromDB(id);
+                await loadArtworks();
+                renderApp();
+            }
+        }
+
+        // Valuation History Log Logic
+        function openHistoryModal(id) {
+            currentHistoryArtId = id;
+            const art = artworks.find(a => a.id === id);
+            if (!art) return;
+
+            document.getElementById('historyArtworkTitle').textContent = `${art.artist} - ${art.title}`;
+            document.getElementById('histDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('histPrice').value = '';
+
+            renderHistoryTable(art);
+            document.getElementById('historyModal').classList.remove('hidden');
+        }
+
+        function closeHistoryModal() {
+            document.getElementById('historyModal').classList.add('hidden');
+        }
+
+        function renderHistoryTable(art) {
+            const tbody = document.getElementById('historyTableBody');
+            const history = art.history || [];
+
+            if (history.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-slate-400">기록된 시세 변경 내역이 없습니다.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = history.map((item, idx) => `
+                <tr>
+                    <td class="p-2.5">${item.date}</td>
+                    <td class="p-2.5 font-bold text-indigo-600">₩${Number(item.price).toLocaleString()}</td>
+                    <td class="p-2.5 text-right">
+                        <button onclick="deletePriceHistory(${idx})" class="text-red-500 hover:underline">삭제</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function addPriceHistory() {
+            const date = document.getElementById('histDate').value;
+            const price = document.getElementById('histPrice').value;
+
+            if (!date || !price) {
+                alert('날짜와 평가 금액을 모두 입력해주세요.');
+                return;
+            }
+
+            const art = artworks.find(a => a.id === currentHistoryArtId);
+            if (!art) return;
+
+            if (!art.history) art.history = [];
+            art.history.unshift({ date, price: Number(price) });
+            art.currentPrice = Number(price);
+
+            await saveArtworkToDB(art);
+            await loadArtworks();
+            renderHistoryTable(art);
+            renderApp();
+
+            document.getElementById('histPrice').value = '';
+        }
+
+        async function deletePriceHistory(idx) {
+            const art = artworks.find(a => a.id === currentHistoryArtId);
+            if (!art || !art.history) return;
+
+            art.history.splice(idx, 1);
+            if (art.history.length > 0) {
+                art.currentPrice = art.history[0].price;
+            }
+
+            await saveArtworkToDB(art);
+            await loadArtworks();
+            renderHistoryTable(art);
+            renderApp();
+        }
+
+        // Backup / Restore / Export
+        function exportJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(artworks, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `art_vault_backup_${new Date().toISOString().split('T')[0]}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (Array.isArray(importedData)) {
+                        for (const art of importedData) {
+                            await saveArtworkToDB(art);
+                        }
+                        await loadArtworks();
+                        renderApp();
+                        alert('성공적으로 백업 데이터를 복원했습니다!');
+                    } else {
+                        alert('올바른 백업 파일 형식이 아닙니다.');
+                    }
+                } catch (err) {
+                    alert('파일을 읽는 중 오류가 발생했습니다.');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function exportCSV() {
+            if (artworks.length === 0) {
+                alert('내보낼 데이터가 없습니다.');
+                return;
+            }
+
+            let csvContent = "\uFEFF작가명,작품명,년도,크기,재료,장르,정가,구입가,현재평가가,구입갤러리,구입일자,비고\n";
+
+            artworks.forEach(a => {
+                const row = [
+                    a.artist || '',
+                    a.title || '',
+                    a.year || '',
+                    a.size || '',
+                    a.medium || '',
+                    a.genre || '',
+                    a.listPrice || 0,
+                    a.purchasePrice || 0,
+                    a.currentPrice || 0,
+                    a.gallery || '',
+                    a.purchaseDate || '',
+                    (a.notes || '').replace(/\n/g, ' ')
+                ].map(v => `"${v}"`).join(",");
+                csvContent += row + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `art_collection_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
     </script>
 </body>
 </html>
